@@ -1,9 +1,10 @@
-import {storefrontPlan,storefrontAtlas,atlasUV} from './storefronts.js';
+import {storefrontPlan,storefrontAtlas,atlasUV,frontageEdges,genericShops} from './storefronts.js';
 import * as T from 'three';
 
 const homes=new Set(['house','detached','residential','semidetached_house','terrace']);
 const utility=new Set(['garage','shed','service','carport']);
 const palette=[0xe0d5be,0xc9d1ce,0xd9c9b9,0xb9c4ca,0xd6d4c9,0xc5b7aa];
+const masonry=[0xc77860,0xa66b54,0x9c7862,0xe5d8bd,0xc5b7a0,0xbcb6a9];
 
 // Five shared materials per tile; façade details are baked into small textures.
 export function buildingTiles(buildings,elevation,storefronts={plans:new Map(),shops:[]}){
@@ -19,8 +20,9 @@ export function buildingTiles(buildings,elevation,storefronts={plans:new Map(),s
   if(!tiles.has(key))tiles.set(key,Array.from({length:5},()=>({positions:[],colors:[],uv:[]})));
   const buckets=tiles.get(key),house=homes.has(building.type),service=utility.has(building.type);
   let seed=0;for(const c of String(building.id??`${x},${y}`))seed=(seed*31+c.charCodeAt(0))>>>0;
-  const wallColor=new T.Color(palette[seed%palette.length]);
+  const wallColor=new T.Color((house||service?palette:masonry)[seed%palette.length]);
   const storefront=storefronts.plans.get(building.id);
+  const fronts=storefront?frontageEdges(points,storefront.target):new Set();
   const inferredHeight=storefront&&!building.heightTagged&&building.height===10&&building.type!=='office'?(seed%3===0?7.2:4.6):building.height;
   const base=building.base??elevation(x,-y),height=service?Math.min(building.height||3.2,3.5):Math.max(3,inferredHeight||7);
   const vec=(a,b)=>new T.Vector2(b[0]-a[0],b[1]-a[1]);
@@ -42,6 +44,7 @@ export function buildingTiles(buildings,elevation,storefronts={plans:new Map(),s
   for(const shop of storefront?.featuredShops||[]){
    let best=null;
    points.forEach((a,i)=>{
+    if(!fronts.has(i))return;
     const b=points[(i+1)%points.length],dx=b[0]-a[0],dy=b[1]-a[1],length=Math.hypot(dx,dy),nx=dy/length,ny=-dx/length;
     if(length<=3||nx*(storefront.target[0]-(a[0]+b[0])/2)+ny*(storefront.target[1]-(a[1]+b[1])/2)<=0)return;
     const t=T.MathUtils.clamp(((shop.point[0]-a[0])*dx+(shop.point[1]-a[1])*dy)/(length*length),0,1);
@@ -52,21 +55,23 @@ export function buildingTiles(buildings,elevation,storefronts={plans:new Map(),s
    if(best)featuredBays.set(`${best.edge}:${best.unit}`,shop.index);
   }
   for(let i=0;i<points.length;i++){
-   const a=points[i],b=points[(i+1)%points.length],length=vec(a,b).length(),bays=Math.max(1,Math.round(length/(service?5:house?3.6:4.2)));
+   const a=points[i],b=points[(i+1)%points.length],length=vec(a,b).length(),bays=Math.max(1,Math.round(length/(service?5:house?3.6:3.2+(seed%3)*.35)));
    // Keep footprint walls facing outward after converting north to negative Z.
    const nx=(b[1]-a[1])/(length||1),ny=-(b[0]-a[0])/(length||1),mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];
-   const front=storefront&&length>3&&(nx*(storefront.target[0]-mid[0])+ny*(storefront.target[1]-mid[1]))>0;
+   const front=fronts.has(i);
    if(!front){quad(wallMaterial,[[a[0],base,-a[1]],[b[0],base,-b[1]],[b[0],top,-b[1]],[a[0],top,-a[1]]],[[wallU(0),0],[wallU(bays),0],[wallU(bays),wallV(stories)],[wallU(0),wallV(stories)]],wallColor);continue}
    const shopTop=Math.min(top,base+3.7),units=Math.max(1,Math.ceil(length/10)),count=storefronts.shops.length;
    const xyz=(t,h,depth=0)=>[a[0]+(b[0]-a[0])*t+nx*depth,h,-a[1]-(b[1]-a[1])*t-ny*depth];
    for(let unit=0;unit<units;unit++){
-    const t0=unit/units,t1=(unit+1)/units,index=featuredBays.get(`${i}:${unit}`)??(storefront.shops.length?storefront.shops[unit%storefront.shops.length]:(seed+unit)%8);
+    const t0=unit/units,t1=(unit+1)/units,index=featuredBays.get(`${i}:${unit}`)??(storefront.shops.length?storefront.shops[unit%storefront.shops.length]:(seed+unit)%genericShops.length);
     const face=[xyz(t0,base),xyz(t1,base),xyz(t1,shopTop),xyz(t0,shopTop)];
     quad(4,face,[[0,0],[1,0],[1,1],[0,1]].map(([u,v])=>atlasUV(index,u,v,count)),new T.Color(0xffffff));
     // Shallow canvas awnings add four triangles per shop, batched with the signs.
     const h=base+2.85,outer=base+2.55,colorUV=atlasUV(index,.02,.82,count),white=new T.Color(0xffffff);
-    quad(4,[xyz(t0,h,.02),xyz(t1,h,.02),xyz(t1,outer,.72),xyz(t0,outer,.72)],Array(4).fill(colorUV),white);
-    quad(4,[xyz(t0,outer,.72),xyz(t1,outer,.72),xyz(t1,outer-.13,.72),xyz(t0,outer-.13,.72)],Array(4).fill(colorUV),white);
+    if(featuredBays.has(`${i}:${unit}`)||(seed+unit)%4===0){
+     quad(4,[xyz(t0+.03/units,h,.02),xyz(t1-.03/units,h,.02),xyz(t1-.03/units,outer,.65),xyz(t0+.03/units,outer,.65)],Array(4).fill(colorUV),white);
+     quad(4,[xyz(t0+.03/units,outer,.65),xyz(t1-.03/units,outer,.65),xyz(t1-.03/units,outer-.13,.65),xyz(t0+.03/units,outer-.13,.65)],Array(4).fill(colorUV),white);
+    }
    }
    if(top>shopTop+.05)quad(wallMaterial,[[a[0],shopTop,-a[1]],[b[0],shopTop,-b[1]],[b[0],top,-b[1]],[a[0],top,-a[1]]],[[wallU(0),0],[wallU(bays),0],[wallU(bays),Math.max(1,Math.round((top-shopTop)/3))],[wallU(0),Math.max(1,Math.round((top-shopTop)/3))]],wallColor);
    // A small capped stone cornice only on shop frontages. Ten batched triangles,
@@ -108,12 +113,13 @@ function facadeTexture(kind,roughness=false){
  const canvas=document.createElement('canvas');canvas.width=kind==='utility'?256:512;canvas.height=kind==='home'?512:256;const c=canvas.getContext('2d');
  let seed=71;const random=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296};
  c.fillStyle=roughness?'#eeeeee':'#92877a';c.fillRect(0,0,canvas.width,canvas.height);
- for(let row=0;row<canvas.height/8;row++)for(let col=-1;col<canvas.width/32;col++){
-  const x=col*32+(row%2)*16,shade=Math.round(151+random()*24);
+ const brickWidth=kind==='commercial'?18:32,brickHeight=kind==='commercial'?6:8;
+ for(let row=0;row<canvas.height/brickHeight;row++)for(let col=-1;col<canvas.width/brickWidth;col++){
+  const x=col*brickWidth+(row%2)*brickWidth/2,shade=Math.round(151+random()*24);
   c.fillStyle=roughness?'#e2e2e2':`rgb(${shade+30},${shade+10},${shade-8})`;
-  c.fillRect(x,row*8,31,7);
-  c.fillStyle=roughness?'#e8e8e8':'#ffffff12';c.fillRect(x,row*8,31,1);
-  c.fillStyle=roughness?'#d9d9d9':'#35271b16';c.fillRect(x+30,row*8+1,1,6);
+  c.fillRect(x,row*brickHeight,brickWidth-1,brickHeight-1);
+  c.fillStyle=roughness?'#e8e8e8':'#ffffff12';c.fillRect(x,row*brickHeight,brickWidth-1,1);
+  c.fillStyle=roughness?'#d9d9d9':'#35271b16';c.fillRect(x+brickWidth-2,row*brickHeight+1,1,brickHeight-2);
  }
  if(kind==='utility'){
   c.fillStyle=roughness?'#bbbbbb':'#b4b7b5';c.fillRect(27,43,202,213);
@@ -122,7 +128,7 @@ function facadeTexture(kind,roughness=false){
  }else{
   for(let floor=0;floor<(kind==='home'?2:1);floor++)for(let variant=0;variant<2;variant++){
    c.save();c.translate(variant*256,floor*256);
-   const home=kind==='home',left=home?78:48,width=home?100:160,frame=home?'#dcd5c3':'#4d514c';
+   const home=kind==='home',left=home?78:variant?64:80,width=home?100:variant?128:96,frame=home?'#dcd5c3':'#484641';
    c.fillStyle=roughness?'#dddddd':'#bcb09d';c.fillRect(0,239,256,17);
    c.fillStyle=roughness?'#cccccc':'#7b7165';c.fillRect(0,237,256,2);
    // The lower half of the house texture includes a paneled entry door.

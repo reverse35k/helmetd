@@ -36,6 +36,25 @@ test('avenue gets storefronts without converting homes or civic buildings',()=>{
  assert.deepEqual([...plans.keys()],['shop']);
 });
 
+test('libraries and museums tagged as generic buildings retain their civic facade',()=>{
+ const data={roads:[road],buildings:[building,{...building,id:'library',name:'Bryant Public Library',amenity:'library'},{...building,id:'museum',name:'Dearborn Historical Museum'},{...building,id:'behind',points:building.points.map(([x,y])=>[x,y+35])}]};
+ assert.deepEqual([...storefrontPlan(data).plans.keys()],['shop']);
+ const real=JSON.parse(fs.readFileSync(new URL('../public/assets/compact-world.json',import.meta.url))),plans=storefrontPlan(real,real.businesses).plans;
+ for(const b of real.buildings.filter(b=>/library|museum/i.test(b.name||'')))assert.equal(plans.has(b.id),false,b.name);
+});
+
+test('retail glazing stays on the closest frontage instead of wrapping side walls',()=>{
+ const avenue={...road,points:[[-100,0,0],[-10,0,0]]};
+ const plans=storefrontPlan({roads:[avenue],buildings:[building]});
+ const [g]=buildingTiles([building],()=>0,plans),pos=g.getAttribute('position'),normal=g.getAttribute('normal');
+ let front=0;
+ for(const group of g.groups.filter(group=>group.materialIndex===4))for(let i=group.start;i<group.start+group.count;i++){
+  // Sloped awnings are excluded; the retail walls must face the avenue.
+  if(Math.abs(normal.getY(i))<.001&&(pos.getY(i)<.001||pos.getY(i)>3.69)){assert.ok(Math.abs(pos.getZ(i)+20)<.001);front++}
+ }
+ assert.equal(front,12);g.dispose();
+});
+
 test('featured signs use the street frontage rather than a recessed wall',()=>{
  const b={...building,points:[[0,20],[20,20],[20,30],[10,30],[10,40],[0,40],[0,20]]};
  const plan=storefrontPlan({roads:[road],buildings:[b]},[{name:'Featured shop',kind:'cafe',brand:'test',point:[6,35],street:'Michigan Avenue'}]);

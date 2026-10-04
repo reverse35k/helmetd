@@ -1,7 +1,6 @@
 import * as T from 'three';
 
 export const cameraViews=[
- {id:'front',label:'FRONT',yaw:0},
  {id:'left',label:'LEFT',yaw:-Math.PI/2},
  {id:'right',label:'RIGHT',yaw:Math.PI/2},
  {id:'back',label:'BACK',yaw:Math.PI},
@@ -20,15 +19,15 @@ export class CameraFeedSchedule{
   if(Number.isFinite(dt)&&dt>0)this.frameTime=this.frameTime*.85+Math.min(dt,.25)*.15;
   if(now<this.nextTime)return null;
   const fps=quality==='high'?8:5;
-  this.nextTime=now+Math.max(1000/(fps*4),this.frameTime*2000);
-  const index=this.cursor;this.cursor=(this.cursor+1)%4;return index;
+  this.nextTime=now+Math.max(1000/(fps*cameraViews.length),this.frameTime*2000);
+  const index=this.cursor;this.cursor=(this.cursor+1)%cameraViews.length;return index;
  }
 }
 
 export class HudCameras{
  constructor(renderer,scene,hud){
   this.renderer=renderer;this.scene=scene;this.schedule=new CameraFeedSchedule();
-  this.root=document.createElement('section');this.root.className='camera-rack';this.root.setAttribute('aria-label','Motorcycle surround cameras');
+  this.root=document.createElement('section');this.root.className='camera-rack';this.root.setAttribute('aria-label','Motorcycle side and rear cameras');
   this.root.innerHTML=cameraViews.map(view=>`<figure class="camera-feed" data-view="${view.id}"><figcaption><span>${view.label}</span><i aria-hidden="true"></i></figcaption><div class="camera-screen" role="img" aria-label="Live ${view.id} camera view"></div></figure>`).join('');
   hud.append(this.root);
   this.overlay=new T.Scene();this.overlayCamera=new T.OrthographicCamera(0,1,1,0,.1,10);this.overlayCamera.position.z=1;
@@ -48,7 +47,7 @@ export class HudCameras{
  async prepare(pose){
   // Compile the offscreen shader variants before riding, rather than hitching
   // the first live HUD update. compileAsync starts compilation synchronously.
-  const renderer=this.renderer,target=renderer.getRenderTarget();positionHudCamera(this.feeds[0].camera,pose,0);
+  const renderer=this.renderer,target=renderer.getRenderTarget();positionHudCamera(this.feeds[0].camera,pose,this.feeds[0].yaw);
   let ready;
   try{renderer.setRenderTarget(this.feeds[0].target);ready=renderer.compileAsync(this.scene,this.feeds[0].camera)}
   finally{renderer.setRenderTarget(target)}
@@ -72,7 +71,7 @@ export class HudCameras{
   if(this.quality!==quality&&live){
    this.quality=quality;this.schedule.nextTime=0;
   }
-  if(this.layoutDirty)this.layout();
+  if(this.layoutDirty||this.overlayCamera.right!==innerWidth||this.overlayCamera.top!==innerHeight)this.layout();
   const renderer=this.renderer,target=renderer.getRenderTarget(),autoClear=renderer.autoClear,scissorTest=renderer.getScissorTest();
   const shadowAutoUpdate=renderer.shadowMap.autoUpdate,shadowNeedsUpdate=renderer.shadowMap.needsUpdate,matrixAutoUpdate=this.scene.matrixWorldAutoUpdate;
   renderer.getViewport(this.viewport);renderer.getScissor(this.scissor);
@@ -82,7 +81,7 @@ export class HudCameras{
    const index=live?this.schedule.next(now,dt,quality):null;
    if(index!==null){
     const feed=this.feeds[index];positionHudCamera(feed.camera,pose,feed.yaw);
-    // Resize a feed only when refreshing it; the other three keep their images.
+    // Resize a feed only when refreshing it; the other feeds keep their images.
     const width=quality==='high'?256:192;if(feed.target.width!==width)feed.target.setSize(width,width*9/16);
     renderer.setRenderTarget(feed.target);renderer.setScissorTest(false);renderer.autoClear=true;
     renderer.render(this.scene,feed.camera);feed.quad.visible=true;feed.element.classList.add('camera-ready');

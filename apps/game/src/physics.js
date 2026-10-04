@@ -2,6 +2,14 @@ export const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 export const ratios=[0,2.667,2,1.6,1.3,1.13,1.04];
 const primary=1.925,final=2.687,radius=.305,mass=268;
 export function engineTorque(rpm){const points=[[1200,25],[3000,48],[5000,61],[6800,68],[8500,63],[10500,42],[11200,0]];for(let i=1;i<points.length;i++){if(rpm<points[i][0]){const [x,y]=points[i-1],[xx,yy]=points[i];return y+(yy-y)*clamp((rpm-x)/(xx-x),0,1)}}return 0}
+export function turnRate(speed,steer,lean,reversing=false){
+ // A four-metre parking turn blends smoothly into lean-based steering at speed.
+ const slow=steer*speed*.25*(reversing?-1:1);
+ if(reversing)return slow;
+ const t=clamp((speed-2)/6,0,1),blend=t*t*(3-2*t);
+ const banking=speed>.05?-9.81*Math.tan(lean)/speed:0;
+ return slow+(banking-slow)*blend;
+}
 export class MotorcyclePhysics{
  constructor(){this.reset({x:0,z:0,y:0,heading:0})}
  reset(spawn){Object.assign(this,{...spawn,speed:0,reversing:false,rpm:1300,gear:1,lean:0,pitch:0,slip:0,throttle:0,brake:0,steer:0,shiftCut:0,crashed:false,crashTime:0,crashGrace:0,distance:0,acceleration:0,suspension:0,suspensionVelocity:0,wheelie:0,lastShift:0,clutch:0,surface:'asphalt'})}
@@ -11,7 +19,7 @@ export class MotorcyclePhysics{
  step(dt,input,ground){
   this.crashGrace=Math.max(0,this.crashGrace-dt);
   if(this.crashed){this.crashTime+=dt;this.speed=0;this.lean+=(1.45-this.lean)*Math.min(1,dt*6);return}
-  this.shiftCut=Math.max(0,this.shiftCut-dt);this.throttle+=(input.throttle-this.throttle)*Math.min(1,dt*6);this.brake=input.brake;this.clutch=input.clutch||0;this.steer+=(input.steer-this.steer)*Math.min(1,dt*4);
+  this.shiftCut=Math.max(0,this.shiftCut-dt);this.throttle+=(input.throttle-this.throttle)*Math.min(1,dt*6);this.brake=input.brake;this.clutch=input.clutch||0;this.steer+=(input.steer-this.steer)*Math.min(1,dt*7);
   const mu=ground.surface==='grass'?.43:ground.surface==='gravel'?.6:1.08;this.surface=ground.surface;
   const reverse=input.reverse||0;
   if(this.reversing||(reverse>0&&this.speed===0&&input.throttle===0)){
@@ -39,10 +47,10 @@ export class MotorcyclePhysics{
   this.speed=clamp(this.speed+this.acceleration*dt,0,90);
   }
   // Speed-sensitive countersteer/lean response with low-speed balancing assistance.
-  const targetLean=this.reversing?0:-this.steer*clamp(this.speed/12,0,1)*.72;
-  this.lean+=(targetLean-this.lean)*Math.min(1,dt*(3.5+1/(this.speed+1)));
+  const targetLean=this.reversing?0:-this.steer*clamp(this.speed/9,0,1)*.82;
+  this.lean+=(targetLean-this.lean)*Math.min(1,dt*(4.5+1/(this.speed+1)));
   const velocity=this.reversing?-this.speed:this.speed;
-  const yaw=this.speed>3?-9.81*Math.tan(this.lean)/this.speed:this.steer*velocity*.16;
+  const yaw=turnRate(this.speed,this.steer,this.lean,this.reversing);
   this.heading+=yaw*dt;this.x+=Math.sin(this.heading)*velocity*dt;this.z-=Math.cos(this.heading)*velocity*dt;this.distance+=this.speed*dt;
   const loadPitch=clamp(-this.acceleration*.009,-.09,.075);this.pitch+=(loadPitch-this.pitch)*Math.min(1,dt*5);
   const springTarget=clamp(-this.acceleration*.0025,-.025,.03)+Math.sin(this.distance*1.3)*.002*Math.min(this.speed/8,1);

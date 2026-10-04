@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import * as T from 'three';
 import {cameraViews,positionHudCamera,CameraFeedSchedule} from '../src/hud-cameras.js';
 
-test('surround cameras face front, left, right and back relative to the motorcycle',()=>{
- const expected=[[0,-1],[-1,0],[1,0],[0,1]],camera=new T.PerspectiveCamera(),direction=new T.Vector3();
+test('HUD cameras show only left, right and back relative to the motorcycle',()=>{
+ assert.deepEqual(cameraViews.map(view=>view.id),['left','right','back']);
+ const expected=[[-1,0],[1,0],[0,1]],camera=new T.PerspectiveCamera(),direction=new T.Vector3();
  for(const heading of [0,Math.PI/2,-Math.PI/3,Math.PI])for(let i=0;i<cameraViews.length;i++){
   const pose={x:83,y:14,z:-121,heading};positionHudCamera(camera,pose,cameraViews[i].yaw);camera.getWorldDirection(direction);
   const horizontal=Math.hypot(direction.x,direction.z),[x,z]=expected[i];
@@ -19,12 +20,12 @@ test('surround cameras face front, left, right and back relative to the motorcyc
 
 test('feed updates share a bounded round-robin budget, independent of main frame rate',()=>{
  for(const frameRate of [60,120]){
-  const schedule=new CameraFeedSchedule(),counts=[0,0,0,0];
+  const schedule=new CameraFeedSchedule(),counts=Array(cameraViews.length).fill(0);
   for(let frame=0;frame<frameRate*2;frame++){
    const index=schedule.next(frame*1000/frameRate,1/frameRate,'balanced');if(index!==null)counts[index]++;
   }
-  assert.ok(counts.every(count=>count>=8),'all four views continue refreshing');
-  assert.ok(counts.reduce((a,b)=>a+b,0)<=40,'balanced mode must not render four extra views every frame');
+  assert.ok(counts.every(count=>count>=8),'all three views continue refreshing');
+  assert.ok(counts.reduce((a,b)=>a+b,0)<=30,'removing the front view also reduces the render budget');
   assert.ok(Math.max(...counts)-Math.min(...counts)<=1,'no direction starves');
  }
 });

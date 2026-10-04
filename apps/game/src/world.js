@@ -15,7 +15,7 @@ export class World{
  collision(x,z){const y=-z;for(const b of this.buildingGrid.get(Math.floor(x/50)+','+Math.floor(y/50))||[]){if(x<b.bounds[0]-.35||x>b.bounds[2]+.35||y<b.bounds[1]-.35||y>b.bounds[3]+.35)continue;let inside=false;const p=b.points;for(let i=0,j=p.length-1;i<p.length;j=i++){if(((p[i][1]>y)!=(p[j][1]>y))&&(x<(p[j][0]-p[i][0])*(y-p[i][1])/(p[j][1]-p[i][1])+p[i][0]))inside=!inside}if(inside)return true}return false}
  async build(scene,loader){
  const texture=async(n,srgb=true)=>{const t=await new T.TextureLoader().loadAsync('/assets/'+n);t.wrapS=t.wrapT=T.RepeatWrapping;t.anisotropy=8;if(srgb)t.colorSpace=T.SRGBColorSpace;return t};
- const asphalt=new T.MeshStandardMaterial({color:0x646866,roughness:1});const concrete=new T.MeshStandardMaterial({color:0x7a7b78,roughness:1});const shoulder=asphalt.clone();shoulder.color.set(0x6a6459);
+ const asphalt=new T.MeshStandardMaterial({color:0x484c4b,roughness:1});const concrete=new T.MeshStandardMaterial({color:0xa4a296,roughness:1});const shoulder=asphalt.clone();shoulder.color.set(0x6a6459);
  const n=this.data.resolution,d=this.data,verts=[],uv=[],indices=[],colors=[];
  for(let j=0;j<n;j++)for(let i=0;i<n;i++){const x=(i/(n-1)-.5)*d.size,z=-(j/(n-1)-.5)*d.size;let h=d.heights[j*n+i];const road=this.roadAt(x,z);if(road&&!road.road.bridge){const a=T.MathUtils.clamp((road.distance-road.road.width/2)/5,0,1);h=h*a+(road.height-.09)*(1-a)}verts.push(x,h,z);uv.push(i/(n-1),j/(n-1));const c=new T.Color().setHSL(.19+Math.sin(x*.03)*.008,.19,.24+Math.sin(x*.013+z*.027)*.025);colors.push(c.r,c.g,c.b);if(i<n-1&&j<n-1){const a=j*n+i;indices.push(a,a+1,a+n,a+1,a+n+1,a+n)}}
  let g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(verts,3));g.setAttribute('uv',new T.Float32BufferAttribute(uv,2));g.setIndex(indices);g.computeVertexNormals();
@@ -27,7 +27,7 @@ export class World{
  const junctions=roadJunctions(this.data.roads),paths=roadPaths(this.data.roads,junctions);
  for(const road of paths){groups[2].push(roadRibbon(road.points,road.width+1.2,road.pavementOffset||0,-.045));groups[road.surface==='concrete'?1:0].push(roadRibbon(road.points,road.width,road.pavementOffset||0));const paint=roadMarkings(road,junctions);stripe[0].push(...paint.white);stripe[1].push(...paint.yellow)}
  for(const s of this.segments){const {a,b,len,road}=s;
- if(road.curb&&road.class!=='service'){const start=this.nodeDegree.get(road.nodeIds[s.index-1])>2?Math.min(8,len*.4):0,end=this.nodeDegree.get(road.nodeIds[s.index])>2?Math.min(8,len*.4):0,pa=a.map((v,k)=>v+(b[k]-v)*start/len),pb=b.map((v,k)=>v-(b[k]-a[k])*end/len);for(const side of [-1,1]){curbs.push(curbRibbon([pa,pb],side*(road.width/2-.10)));if(['residential','tertiary','unclassified'].includes(road.class))walks.push(roadRibbon([pa,pb],1.52,side*(road.width/2+2.25),.12))}}
+ if((road.curb||road.name==='Michigan Avenue')&&road.class!=='service'){const start=this.nodeDegree.get(road.nodeIds[s.index-1])>2?Math.min(8,len*.4):0,end=this.nodeDegree.get(road.nodeIds[s.index])>2?Math.min(8,len*.4):0,pa=a.map((v,k)=>v+(b[k]-v)*start/len),pb=b.map((v,k)=>v-(b[k]-a[k])*end/len);for(const side of [-1,1]){curbs.push(curbRibbon([pa,pb],side*(road.width/2-.10)));if(road.name==='Michigan Avenue')walks.push(roadRibbon([pa,pb],3.2,side*(road.width/2+1.65),.12));else if(['residential','tertiary','unclassified'].includes(road.class))walks.push(roadRibbon([pa,pb],1.52,side*(road.width/2+2.25),.12))}}
 
  }
  addTiles(scene,curbs,concrete);addTiles(scene,walks,concrete);
