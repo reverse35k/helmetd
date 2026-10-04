@@ -42,7 +42,7 @@ export function approachPoint(edge,distance,incoming){
   remaining-=current.len;current=previous[0];
  }
  const t=Math.max(0,1-remaining/current.len);
- return {x:current.a[0]+(current.b[0]-current.a[0])*t,z:-current.a[1]-(current.b[1]-current.a[1])*t,y:current.a[2]+(current.b[2]-current.a[2])*t,heading:current.heading};
+ return {x:current.a[0]+(current.b[0]-current.a[0])*t,z:-current.a[1]-(current.b[1]-current.a[1])*t,y:current.a[2]+(current.b[2]-current.a[2])*t,heading:current.heading,road:current.road};
 }
 
 export function departurePoint(edge,distance,outgoing){

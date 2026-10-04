@@ -1,5 +1,5 @@
 import * as T from 'three';
-import {laneCount} from './road-layout.js';
+import {laneCount,laneCenter} from './road-layout.js';
 
 function visorGeometry(){
  const p=[],indices=[];
@@ -34,7 +34,7 @@ export function addTrafficLights(scene,layouts){
   for(const lane of lanes){const x=lane-right;tube([x,mastHeight,0],[x,6.12,0],.025);head(x,5.42)}
   head(0,3.05);
   // The stripe covers only the incoming half of a two-way road.
-  const width=laneCount(e.road)*(e.road.laneWidth||3.35),center=(lanes[0]+lanes.at(-1))/2,fx=Math.sin(stop.heading),fy=Math.cos(stop.heading);
+  const stopRoad=stop.road||e.road,count=laneCount(stopRoad),width=count*(stopRoad.laneWidth||3.35),center=(laneCenter(stopRoad)+laneCenter(stopRoad,count-1))/2,fx=Math.sin(stop.heading),fy=Math.cos(stop.heading);
   dummy.position.set(stop.x+fx*.2+Math.cos(stop.heading)*center,stop.y+.055,stop.z-fy*.2+Math.sin(stop.heading)*center);dummy.rotation.set(0,-stop.heading,0);dummy.scale.set(width,.025,.4);dummy.updateMatrix();
   const marking={matrix:dummy.matrix.clone(),record};parts.line.items.push(marking);record.parts.push(marking);
  }

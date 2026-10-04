@@ -5,9 +5,10 @@ import * as T from 'three';
 import {World,roadRibbon} from '../src/world.js';
 import {RoadTraffic,signalPhase} from '../src/traffic.js';
 import {addTrafficLights} from '../src/traffic-lights.js';
-import {laneCenter} from '../src/road-layout.js';
+import {laneCenter,laneCount} from '../src/road-layout.js';
 import {coversPavement} from '../src/signal-clearance.js';
 import {signalArmsCross,approachPoint} from '../src/signal-layout.js';
+import {roadPaths} from '../src/road-markings.js';
 
 const data=JSON.parse(fs.readFileSync(new URL('../public/assets/compact-world.json',import.meta.url)));
 const world=new World(data),traffic=new RoadTraffic(world);
@@ -48,9 +49,10 @@ test('crossing mast arms have separate heights',()=>{
 
 test('all poles clear the actual rendered road ribbons, including intersecting roads',()=>{
  const material=new T.MeshBasicMaterial({side:T.DoubleSide}),meshes=new Map();
+ const pathFor=new Map();for(const path of roadPaths(data.roads))for(const source of path.sources)pathFor.set(source,path);
  const ray=new T.Raycaster(),origin=new T.Vector3(),down=new T.Vector3(0,-1,0);
  for(const {pole} of traffic.signalLayouts){
-  const roads=new Set((world.grid.get(Math.floor(pole.x/50)+','+Math.floor(-pole.z/50))||[]).map(s=>s.road));
+  const roads=new Set((world.grid.get(Math.floor(pole.x/50)+','+Math.floor(-pole.z/50))||[]).map(s=>pathFor.get(s.road)));
   for(const road of roads){
    if(!meshes.has(road)){const mesh=new T.Mesh(roadRibbon(road.points,road.width,road.pavementOffset||0),material);mesh.updateMatrixWorld();meshes.set(road,mesh)}
    ray.set(origin.set(pole.x,pole.y+1,pole.z),down);ray.far=2;
@@ -110,4 +112,16 @@ test('cars stop before a wide intersection even across several short OSM segment
  assert.ok(car.obj.position.z-2.4>=13.05-.01,`front bumper crossed stop line: ${car.obj.position.z}`);assert.ok(car.speed<.05);
  const control=t.edges.find(e=>e.road===main&&e.signal);t.time=control.axis*33;
  for(let i=0;i<300;i++)t.update(1/60,rider);assert.ok(car.speed>3);assert.ok(car.obj.position.z<13);
+});
+
+test('stop bars align with the approach lanes even when the far-side lane count changes',()=>{
+ const scene=new T.Scene(),renderer=addTrafficLights(scene,traffic.signalLayouts),position=new T.Vector3(),scale=new T.Vector3();
+ for(const record of renderer.records){
+  const {stop,e}=record.layout,road=stop.road||e.road,count=laneCount(road),matrix=record.parts.at(-1).matrix;
+  position.setFromMatrixPosition(matrix);scale.setFromMatrixScale(matrix);
+  const lateral=(position.x-stop.x)*Math.cos(stop.heading)+(position.z-stop.z)*Math.sin(stop.heading);
+  assert.ok(Math.abs(lateral-(laneCenter(road)+laneCenter(road,count-1))/2)<1e-6);
+  assert.ok(Math.abs(scale.x-count*(road.laneWidth||3.35))<1e-6);
+ }
+ for(const o of scene.children){o.geometry.dispose();o.material.dispose()}
 });
